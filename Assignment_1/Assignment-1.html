@@ -417,6 +417,11 @@ Max, 1st and 3rd Quartile.</p>
 summary(houseprices$Price)</code></pre>
 <pre><code>##    Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
 ##   85000  633000  880000 1056697 1302000 9000000</code></pre>
+<pre class="r"><code># Analysis of the frequency of each house Type
+table(houseprices$Type)</code></pre>
+<pre><code>## 
+##     h     t     u 
+## 12095  2005  4296</code></pre>
 <p>Transform the variable Type from a character variable to a numeric
 variable. h becomes number 1, t becomes 2, u becomes 3</p>
 <pre class="r"><code># Transform one variable
