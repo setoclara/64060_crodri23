@@ -1,0 +1,38 @@
+---
+title: "Assignment 1"
+output:
+  html_document: default
+  pdf_document: default
+machine learning: assignment 1
+source of dataset: "Kaggle - https://www.kaggle.com/code/rtatman/welcome-to-data-science-in-r/input"
+---
+Import dataset into R to be able to access all variables for house prices
+```{r}
+# Import dataset into R
+houseprices <- read.csv("houseprices.csv")
+```
+Descriptive statistics for categorical variables indicate that they are character variables and the number of entries for each. Desciptive statistics for quantitative variables indicate the min, 1st quartile, median, mean 3rd quartile and max for each variable.
+```{r}
+# Print out descriptive statistics for categorical and quantitative variables 
+summary(houseprices)
+```
+Descriptive statistics of the Price variable - Min, Median, Mean, Max, 1st and 3rd Quartile.
+```{r}
+# Descriptive analysis of house prices for the dataset
+summary(houseprices$Price)
+```
+Transform the variable Type from a character variable to a numeric variable. h becomes number 1, t becomes 2, u becomes 3
+```{r}
+# Transform one variable
+houseprices$Type = as.numeric(factor(houseprices$Type))
+```
+Analyze the change of the Price variable based on the house location using the Post Code variable. Output can be used to analyze the value of housing in different neighborhoods. 
+```{r}
+# Plot one quantitative variable
+plot(houseprices$Price, houseprices$Postcode)
+```
+
+```{r}
+# Create a scatterplot
+plot(houseprices$Price, houseprices$Rooms, main = "House Price & Number of Rooms", xlab = "Price", ylab = "Rooms")
+```
