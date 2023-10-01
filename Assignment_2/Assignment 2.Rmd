@@ -1,0 +1,323 @@
+---
+title: "Assignment 2"
+---
+
+```{r}
+library(tidyverse)
+UniversalBanks <- read_csv("Documents/Machine Learning/UniversalBanks.csv")
+head(UniversalBanks)
+summary(UniversalBanks)
+```
+* First, we create a dataset with only the required columns. We will use the dplyr package. Install it if necessary
+* Then, we create an index for the training sample.
+* We next create the training dataset
+* We then use the reverse index of the training sample to create the validation set
+
+
+```{r}
+library(dplyr)
+library(caret)
+UniversalBanks <- select(UniversalBanks,Age,Experience,Income,Family,CCAvg,Education,Mortgage,'Personal Loan','Securities Account','CD Account',Online,CreditCard) # Select a subset of variables
+
+Test_Index = createDataPartition(UniversalBanks$'Personal Loan',p=0.2, list=FALSE)
+Test_Data = UniversalBanks[Test_Index,]
+TraVal_Data = UniversalBanks[-Test_Index,]
+
+Train_Index = createDataPartition(TraVal_Data$'Personal Loan',p=0.75, list=FALSE)
+Train_Data = TraVal_Data[Train_Index,]
+Validation_Data = TraVal_Data[-Train_Index,]
+
+summary(Train_Data)
+summary(Validation_Data)
+summary(Test_Data)
+```
+
+## Normalization
+
+Let us now normalize the data. 
+
+The preProcess ( ) function that is in the ‘caret’ package is a powerful method that has implemented a number of data processing and transformation methods.
+
+The function implements min-max normalization using “range” as the method or z-score scaling when using “center” and “scale” as input method parameters.
+```{r}
+# Copy the original data
+train.norm.df <- Train_Data
+valid.norm.df <- Validation_Data
+traval.norm.df <- TraVal_Data
+
+# use preProcess() from the caret package to normalize Sales and Age.
+norm.values <- preProcess(Train_Data, method=c("center", "scale"))
+
+train.norm.df <- predict(norm.values, Train_Data)
+valid.norm.df <- predict(norm.values, Validation_Data)
+traval.norm.df <- predict(norm.values, traval.norm.df)
+test.norm.df <- predict(norm.values, Test_Data)
+
+summary(train.norm.df)
+var(train.norm.df)
+summary(valid.norm.df)
+var(valid.norm.df)
+```
+## Modeling k-NN
+
+Let us now apply knn. knn() is available in library FNN (provides a list of the nearest neighbors), and library class (allows a numerical output variable).
+
+```{r}
+library(class)
+nn <- knn(train = train.norm.df[, -which(names(train.norm.df) == 'Personal Loan')],
+          test = test.norm.df[, -which(names(test.norm.df) == 'Personal Loan')],
+          cl = train.norm.df$`Personal Loan`, 
+          k = 1, 
+          prob = TRUE)
+
+row.names(Train_Data)[attr(nn, "nn.index")]
+```
+## Hypertuning using Validation
+
+To determine k, we use the performance on the validation set.
+Here, we will vary the value of k from 1 to 14
+
+```{r}
+library(caret)
+accuracy.df <- data.frame(k = seq(1, 14, 1), accuracy = rep(0, 14))
+
+train.norm.df$`Personal Loan` <- as.factor(train.norm.df$`Personal Loan`)
+valid.norm.df$`Personal Loan` <- as.factor(valid.norm.df$`Personal Loan`)
+
+for (i in 1:14) {
+  knn.pred <- knn(train.norm.df, valid.norm.df, 
+                  cl = train.norm.df$`Personal Loan`, k = i)
+  accuracy.df <- confusionMatrix(knn.pred, valid.norm.df$`Personal Loan`)$overall[1]
+  print(paste("k =", i, ", Accuracy =", accuracy.df))
+}
+```
+Prediction
+
+Before we predict for the test set, we should combine the Training and Validation set, normalize the data, and then do the prediction. 
+```{r}
+
+norm.values <- preProcess(TraVal_Data[, 1:2], method=c("center", "scale")) # Use combined set to normalize
+
+traval.norm.df <- predict(norm.values, TraVal_Data)
+test.norm.df <- predict(norm.values, Test_Data)
+summary(traval.norm.df)
+summary(test.norm.df)
+```
+
+Now we predict for the test set.
+
+```{r}
+knn.pred.new <- knn(train = traval.norm.df, 
+                    test = test.norm.df, 
+                    cl = traval.norm.df$`Personal Loan`, 
+                    k = 1)
+row.names(TraVal_Data)[attr(nn, "nn.index")]
+indices <- c(1:997)
+
+# Subset the original data using the indices
+nearest_neighbors_data <- TraVal_Data[indices, ]
+
+# View the data
+print(nearest_neighbors_data)
+
+```
+# Hypertuning - kNN - Part 2
+
+Earlier, we saw an example of hypertuning in determining the value of k. Small values, while sensitive to the data, may also model noise, while large values of k leads to smoother predictions, but are insensitive to local changes. We also saw an example above on how to pick k using the validation set results.
+
+Here, we will use the Caret package that provides a wrapper for a large number of machine learning models (more than 200 models as of now). The train( ) function will automatically perform a grid search over a pre-defined set of hyperparameter values. It then select the best hyperparameter values, for us, k, using cross validations and train a model. This makes the process easier.
+
+***
+
+## Example - Hypertuning
+```{r}
+library(ISLR)
+library(caret)
+summary(UniversalBanks)
+```
+
+### Normalization
+
+```{r}
+#let's normalize the data before modelling 
+norm_model<-preProcess(UniversalBanks, method = c('range'))
+UniversalBanks_normalized<-predict(norm_model,UniversalBanks)
+summary(UniversalBanks_normalized)
+sd(UniversalBanks_normalized$'Personal Loan')
+```
+# 2. What is a choice of k that balances between overfitting and ignoring the predictor information?
+
+Train a k-NN model using the train() function from Caret 
+
+```{r}
+library(caret)
+set.seed(123)
+UniversalBanks_normalized$`Personal Loan` <-factor(UniversalBanks_normalized$`Personal Loan`)
+Search_grid <- expand.grid(k=c(2,7,9,15))
+model <- train(`Personal Loan` ~ Age + Income + Experience + Family + CCAvg + Education + Mortgage + Online + CreditCard + `Securities Account` + `CD Account`,
+               data = UniversalBanks_normalized, 
+               method = "knn", 
+               tuneGrid = Search_grid)
+model
+```
+Choice of k that balances between overfitting and ignoring predictor information is k=1.
+
+```{r}
+set.seed(123)
+Serach_grid <- expand.grid(k=c(2,7,9,15))
+model<-train(`Personal Loan`~Age + Income + Experience + Family + CCAvg + Education + Mortgage + Online + CreditCard + `Securities Account` + `CD Account`, data=UniversalBanks, 
+             method="knn", tuneGrid=Serach_grid,
+             preProcess='range')
+model
+```
+# k-NN Class Package
+
+```{r}
+library(class)
+library(caret)
+library(ISLR)
+summary(UniversalBanks)
+```
+
+Normalize data
+
+```{r}
+#normalize the data first: build a model and apply 
+norm_model<-preProcess(UniversalBanks, method = c('range'))
+UniversalBanks_normalized<-predict(norm_model,UniversalBanks)
+```
+
+We now predict Personal Loan using UniversalBanks data
+
+```{r}
+UniversalBanks_normalized<-UniversalBanks_normalized[,-2]
+# Use 80% of data for training and the rest for testing
+Index_Train <- createDataPartition(UniversalBanks_normalized$`Personal Loan`, p = 0.8, list = FALSE)
+Train <-UniversalBanks_normalized[Index_Train,]
+Test  <-UniversalBanks_normalized[-Index_Train,]
+```
+
+The Y variable is Personal Loan.
+
+```{r}
+Train_labels <- as.factor(Train$`Personal Loan`)
+Test_labels <- as.factor(Test$`Personal Loan`)
+
+Train_Predictors <- UniversalBanks_normalized[, c("Age", "Mortgage", "Securities Account", "CD Account", "Online", "CreditCard")]
+Test_Predictors <- Test[, c("Age", "Mortgage", "Securities Account", "CD Account", "Online", "CreditCard")]
+
+Train_labels <- Train[, c("Personal Loan")]
+Test_labels  <-Test[,c("Personal Loan")] 
+```
+
+Train a knn model where k=1
+
+```{r}
+# To fix the error "'train' and 'class' have different lenghts
+Train_labels <- as.factor(Train$`Personal Loan`)
+
+# Subsetting Train_Predictors and Train_labels
+Train_subset <- Train_Predictors[1:4000, ]
+Train_labels_subset <- Train_labels[1:4000]
+
+# Run kNN
+Predicted_Test_labels <- knn(Train_subset, Test_Predictors, 
+                             cl = Train_labels_subset, 
+                             k = 1)
+# Look at the 6 first values of predicted class (i.e., default status) of test set
+head(Predicted_Test_labels)
+```
+
+# 3. Show the confusion matrix for the validation data that results from using the best k.
+
+```{r error=TRUE}
+install.packages("gmodels",repos = "http://cran.r-project.org")
+library(gmodels)
+str(df)
+CrossTable(x=Test_labels,y=Predicted_Test_labels, prop.chisq = FALSE)
+```
+
+This matrix shows the following: If Yes is positive, then the misclassifications are 45 false positives, and 12 false negatives. We can identify several measures based on this table. For example
+
+* Accuracy = Number correctly identified / Total = (21 + 1921) / 1999 = .971
+* Recall is the true positive rate or sensitivity = 21 / 66 = .318
+* Precision is the positive predictive value = 21 / (21 + 12) = 0.636
+* Specificity, also called as the true negative rate = 1921 / 1933 = .993
+
+# 1. Age = 40, Experience = 10, Income = 84, Family = 2, CCAvg = 2, Education_1 = 0, Education_2 = 1, Education_3 = 0, Mortgage = 0, Securities Account = 0, CD Account = 0, Online = 1, and Credit Card = 1. Perform a k-NN classification with all predictors except ID and ZIP code using k = 1. Remember to transform categorical predictors with more than two categories into dummy variables first. Specify the success class as 1 (loan acceptance), and use the default cutoff value of 0.5. How would this customer be classified?
+
+```{r}
+X_train <- Train_Data[, c("Age", "Experience", "Income", "Family", "CCAvg", "Education", "Mortgage", "Securities Account", "CD Account", "Online", "CreditCard")]
+y_train <- Train_Data[["Personal Loan"]]
+customer_one <- data.frame(Age = 40, Experience = 10, Income = 84, Family = 2, CCAvg = 2, Education = 2,Mortgage = 0, `Securities Account` = 0, `CD Account` = 0,Online = 1, `Credit Card` = 1)
+predicted_class <- knn(train = X_train, test = customer_one, cl = y_train, k = 1)
+print(predicted_class)
+```
+
+customer_one as well as customer_two, since the data provided is the same, will be classified as class 0 meaning it will not accept the personal loan offer.
+
+# 4. Consider the following customer: Age = 40, Experience = 10, Income = 84, Family = 2, CCAvg = 2, Education_1 = 0, Education_2 = 1, Education_3 = 0, Mortgage = 0, Securities Account = 0, CD Account = 0, Online = 1 and Credit Card = 1. Classify the customer using the best k.
+
+we determined best k = 1
+
+```{r}
+X_train <- Train_Data[, c("Age", "Experience", "Income", "Family", "CCAvg", "Education", "Mortgage", "Securities Account", "CD Account", "Online", "CreditCard")]
+y_train <- Train_Data[["Personal Loan"]]
+customer_two <- data.frame(Age = 40, Experience = 10, Income = 84, Family = 2, CCAvg = 2, Education = 2,Mortgage = 0, `Securities Account` = 0, `CD Account` = 0,Online = 1, `Credit Card` = 1)
+predicted_class <- knn(train = X_train, test = customer_two, cl = y_train, k = 1)
+print(predicted_class)
+```
+
+The model predicts that customer two for k=1 belongs to class 0, meaning the customer will most likely not accept the personal loan offer.
+
+# 5. Repartition the data, this time into training, validation, and test sets (50% : 30% : 20%). Apply the k-NN method with the k chosen above. Compare the confusion matrix of the test set with that of the training and validation sets. Comment on the differences and their reason.
+
+```{r}
+# Repartition the data. Training 50%, Validation 30%, and test set 20%
+set.seed(123)
+n <- nrow(UniversalBanks)
+train_size <- round(0.5 * n)  # 50% training
+validation_size <- round(0.3 * n)  # 30% validation
+test_size <- n - train_size - validation_size  # 20% test
+
+split_indices <- sample(1:n, size = n, replace = FALSE)
+
+Train_Data <- UniversalBanks[split_indices[1:train_size], ]
+Validation_Data <- UniversalBanks[split_indices[(train_size + 1):(train_size + validation_size)], ]
+Test_Data <- UniversalBanks[split_indices[(train_size + validation_size + 1):n], ]
+
+# Prepare the data sets
+X_train <- Train_Data[, c("Age", "Experience", "Income", "Family", "CCAvg", "Education", "Mortgage", "Securities Account", "CD Account", "Online", "CreditCard")]
+y_train <- Train_Data$`Personal Loan`
+
+X_validation <- Validation_Data[, c("Age", "Experience", "Income", "Family", "CCAvg", "Education", "Mortgage", "Securities Account", "CD Account", "Online", "CreditCard")]
+y_validation <- Validation_Data$`Personal Loan`
+
+X_test <- Test_Data[, c("Age", "Experience", "Income", "Family", "CCAvg", "Education", "Mortgage", "Securities Account", "CD Account", "Online", "CreditCard")]
+y_test <- Test_Data$`Personal Loan`
+
+# Apply k-NN on the training set
+predicted_train <- knn(train = X_train, test = X_train, cl = y_train, k = 1)
+
+# Apply k-NN on the validation set
+predicted_validation <- knn(train = X_train, test = X_validation, cl = y_train, k = 1)
+
+# Apply k-NN on the test set
+predicted_test <- knn(train = X_train, test = X_test, cl = y_train, k = 1)
+
+# Compare confusion matrix of the test set with training and validation sets
+
+confusion_train <- table(predicted_train, y_train)
+print("Confusion Matrix for Training Set:")
+print(confusion_train)
+
+confusion_validation <- table(predicted_validation, y_validation)
+print("\nConfusion Matrix for Validation Set:")
+print(confusion_validation)
+
+confusion_test <- table(predicted_test, y_test)
+print("\nConfusion Matrix for Test Set:")
+print(confusion_test)
+```
+
+In this case we can see that the model performs perfectly on the train set with no false negatives or false positives. In the validation test we see more false positives and negatives compared to the train set wich indicates overfitting. The test set also did not perform as well as the train set but it is in line witht the validation set. The test set being in line with the validation set means that the model might have limitation capturing underlying patterns of data.The high number of false positives and negatives indicated that the model might need more features to distinguish between classes.
