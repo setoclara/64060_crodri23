@@ -1,0 +1,97 @@
+---
+title: "Assignment 5"
+output:
+  html_document: default
+  pdf_document: default
+date: "2023-11-13"
+---
+Install required packages
+```{r}
+library(tidyverse)  # data manipulation
+# install.packages("factoextra") 
+library(factoextra) 
+library(dplyr)
+library(ggplot2)
+library(cluster)
+set.seed(123)
+```
+Import data set
+```{r}
+library(readr)
+Cereals <- read_csv("Cereals.csv")
+View(Cereals)
+```
+First we process the data and remove all cereals with missing values
+```{r}
+# remove all missing values
+cereals_data <- na.omit(Cereals)
+
+#normalize the data
+min_max_normalize <- function(x) {
+  return ((x - min(x)) / (max(x) - min(x)))
+}
+
+cluster_columns <- c("calories", "protein", "fat", "sodium", "fiber", "carbo", "sugars", "potass", "vitamins")
+cereals_data[cluster_columns] <- lapply(cereals_data[cluster_columns], min_max_normalize)
+print(cereals_data)
+```
+1. Apply hierarchical clustering to the data using Euclidean distance to the normalized measurements. Use Agnes to compare the clustering from single linkage, complete linkage, average linkage, and Ward. Choose the best method. How many clusters would you choose?
+```{r}
+
+methods <- c("single", "complete", "average", "ward.D2")
+
+perform_clustering <- function(method, data) {
+  hc <- hclust(dist(data), method = method)
+  plot(hc, main = paste("Dendrogram using", method, "linkage"))
+}
+
+for (method in methods) {
+  perform_clustering(method, cereals_data[cluster_columns])
+}
+
+clusters_ward <- cutree(hclust(dist(cereals_data[cluster_columns]), method = "ward.D2"), k = 4)
+
+cereals_data$Cluster_Ward <- clusters_ward
+```
+2. How many clusters would you chose? 
+```{r}
+k = 4 
+```
+3. Comment on the structure of the clusters and on their stability. 
+```{r}
+train_indices <- sample(1:nrow(cereals_data), size = nrow(cereals_data) / 2)
+train_data <- cereals_data[train_indices, ]
+test_data <- cereals_data[-train_indices, ]
+
+train_centroids <- aggregate(train_data[cluster_columns], by=list(Cluster=train_data$Cluster_Ward), mean)
+
+find_closest_centroid <- function(record, centroids) {
+  distances <- apply(centroids[, -1], 1, function(centroid) sum((record - centroid)^2))
+  return(which.min(distances))
+}
+
+test_data$Cluster_Assigned <- apply(test_data[cluster_columns], 1, function(x) find_closest_centroid(x, train_centroids))
+
+original_test_clusters <- test_data$Cluster_Ward
+
+## Assess how consistent the cluster assignments are compared to the assignments based on all the data.
+
+consistency <- mean(test_data$Cluster_Assigned == original_test_clusters)
+consistency_percentage <- consistency * 100
+print(paste("Consistency: ", consistency_percentage, "%"))
+```
+The consistency of the cluster assignments is of 94.59%. This means that 94.59% of the data in the testing sets was assigned to the same cluster when using cereals_data. This indicates high consistency and that the data set is not highly sensitive to variations in the data.
+
+4. The elementary public schools would like to choose a set of cereals to include in their daily cafeterias. Every day a different cereal is offered, but all cereals should support a healthy diet. For this goal, you are requested to find a cluster of “healthy cereals.” Should the data be normalized? If not, how should they be used in the cluster analysis?
+```{r}
+healthy_cereals <- aggregate(cereals_data[cluster_columns], by=list(Cluster=cereals_data$Cluster_Ward), mean)
+print(healthy_cereals)
+```
+The data was normlized to perform this cluster analysis. We found four clusters 
+```{r}
+# Compared to the other 3 clusters, Cluster #4 is the healthiest. It's low on calories, protein, fat, sodium and sugars.
+
+# Print the names of cereals in this cluster.
+healthy_cereals <- cereals_data[cereals_data$Cluster_Ward == 4, ]
+print(healthy_cereals$name)
+```
